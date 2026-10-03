@@ -210,7 +210,7 @@ try:
         .decode("utf-8")
         .strip().split("/")
     )
-    repo_owner = r_owner[-2] + "/" + r_owner[-1].replace(".git", "")
+    repo_owner = r_owner[-2].split(":")[-1] + "/" + r_owner[-1].replace(".git", "")
 except subprocess.CalledProcessError:
     repo_owner = "unknown"
 

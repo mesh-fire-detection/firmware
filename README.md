@@ -1,3 +1,56 @@
+# Mesh Fire Detection firmware
+
+Firmware for [Mesh Fire Detection](https://meshfiredetection.org), based on
+[meshtastic/firmware](https://github.com/meshtastic/firmware). We retain Meshtastic's
+LoRa mesh protocol and sensor drivers, and add configuration for our sensor nodes
+and backend. Our current base is Meshtastic `v2.7.26.54e0d8d`.
+
+## Our configuration
+
+| Setting       | Mesh Fire Detection default                                                 |
+| ------------- | --------------------------------------------------------------------------- |
+| Build profile | `mesh-fire-sensor`, based on RAK4631                                        |
+| Deployment    | Washington, USA; LoRa region `US`                                           |
+| Telemetry     | Device, environment, and particle measurements enabled; 15-minute intervals |
+| MQTT server   | `mqtt.meshfiredetection.org:1884`                                           |
+| MQTT root     | `msh/US`; encrypted protobuf packets                                        |
+| Provisioning  | Radio transmission and MQTT connection disabled until configured            |
+
+Sensor nodes send readings over LoRa to a gateway. A gateway forwards packets to
+our server; sensor nodes do not need their own internet connection. Private channel
+keys, gateway credentials, and node registration are provisioned separately and
+are not stored in this repository.
+
+We maintain one codebase and one image for RAK4631 nodes. Roles and enabled modules
+are selected through device configuration. The initial role is SENSOR; the
+Notecard transport still needs to be added to this shared build.
+
+| Module                        | Current status                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------- |
+| RAK1906 / Bosch BME680        | Existing driver enabled; measurements verified on the USB node's installed firmware |
+| RAK12039 / Plantower PMSA003I | Existing driver enabled; real hardware test pending                                 |
+| RAK13102 / Blues Notecard     | Cellular transport integration pending; requires Notehub                            |
+
+The new sensor build has passed compilation and three host tests. It has not yet
+been flashed onto the USB node or verified through our gateway and broker.
+
+## Build
+
+```sh
+git submodule update --init --recursive
+pio run -e mesh-fire-sensor
+pio test -d test/test_mesh_fire_defaults -e mesh-fire-defaults-test
+```
+
+See [project configuration, hardware evidence, and provisioning steps](MESH_FIRE_DETECTION.md)
+before flashing or deploying. Saved node settings are preserved during firmware
+upgrades; project defaults apply when a default configuration is created.
+
+## Upstream Meshtastic project
+
+The project information below describes upstream Meshtastic. Its release badges,
+CI results, and statistics refer to the upstream project.
+
 <div align="center" markdown="1">
 
 <img src=".github/meshtastic_logo.png" alt="Meshtastic Logo" width="80"/>
@@ -21,9 +74,9 @@
 	<a href="https://meshtastic.org/docs/">Documentation</a>
 </div>
 
-## Overview
+### Upstream overview
 
-This repository contains the official device firmware for Meshtastic, an open-source LoRa mesh networking project designed for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware supports various hardware platforms, including ESP32, nRF52, RP2040/RP2350, and Linux-based devices.
+Meshtastic is an open-source LoRa mesh networking project designed for long-range, low-power communication without relying on internet or cellular infrastructure. Its upstream firmware supports various hardware platforms, including ESP32, nRF52, RP2040/RP2350, and Linux-based devices.
 
 Meshtastic enables text messaging, location sharing, and telemetry over a decentralized mesh network, making it ideal for outdoor adventures, emergency preparedness, and remote operations.
 
@@ -34,6 +87,6 @@ Meshtastic enables text messaging, location sharing, and telemetry over a decent
 
 Join our community and help improve Meshtastic! 🚀
 
-## Stats
+### Upstream stats
 
 ![Alt](https://repobeats.axiom.co/api/embed/8025e56c482ec63541593cc5bd322c19d5c0bdcf.svg "Repobeats analytics image")

@@ -9,6 +9,9 @@
 #include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#ifdef MESH_FIRE_DETECTION
+#include "MeshFireDefaults.h"
+#endif
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
@@ -799,6 +802,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     initConfigIntervals();
     variantDefaultConfig();
     variantDefaultModuleConfig();
+#ifdef MESH_FIRE_DETECTION
+    meshFire::installDefaultConfig(config);
+    installRoleDefaults(config.device.role);
+#endif
 }
 
 void NodeDB::initConfigIntervals()
@@ -944,6 +951,9 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
     initModuleConfigIntervals();
+#ifdef MESH_FIRE_DETECTION
+    meshFire::installDefaultModuleConfig(moduleConfig);
+#endif
 }
 
 void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
