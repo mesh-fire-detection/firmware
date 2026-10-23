@@ -308,6 +308,9 @@ NodeDB::NodeDB()
         crypto->setDHPrivateKey(config.security.private_key.bytes);
     }
 #endif
+#ifdef MESH_FIRE_DETECTION
+    meshFire::installDefaultOwnerName(owner, getNodeNum());
+#endif
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);
@@ -1636,7 +1639,7 @@ bool NodeDB::saveToDisk(int saveWhat)
 
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
-#ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
+#if defined(ARCH_NRF52) && !defined(MESH_FIRE_DETECTION)
         spiLock->lock();
         FSCom.format();
         spiLock->unlock();

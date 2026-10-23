@@ -15,6 +15,7 @@ and backend. Our current base is Meshtastic `v2.7.26.54e0d8d`.
 | MQTT server   | `mqtt.meshfiredetection.org:1884`                                           |
 | MQTT root     | `msh/US`; encrypted protobuf packets                                        |
 | Provisioning  | Radio transmission and MQTT connection disabled until configured            |
+| Node name     | `MFD Sensor <ID suffix>`; Bluetooth `MFDS_<MAC suffix>`                     |
 
 Sensor nodes send readings over LoRa to a gateway. A gateway forwards packets to
 our server; sensor nodes do not need their own internet connection. Private channel
@@ -23,16 +24,23 @@ are not stored in this repository.
 
 We maintain one codebase and one image for RAK4631 nodes. Roles and enabled modules
 are selected through device configuration. The initial role is SENSOR; the
-Notecard transport still needs to be added to this shared build.
+Notecard transport is included in this shared build and stays disabled until
+the Notecard is explicitly provisioned. See [gateway setup and recovery](NOTECARD_GATEWAY.md).
 
-| Module                        | Current status                                                                      |
-| ----------------------------- | ----------------------------------------------------------------------------------- |
-| RAK1906 / Bosch BME680        | Existing driver enabled; measurements verified on the USB node's installed firmware |
-| RAK12039 / Plantower PMSA003I | Existing driver enabled; real hardware test pending                                 |
-| RAK13102 / Blues Notecard     | Cellular transport integration pending; requires Notehub                            |
+| Module                        | Current status                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| RAK1906 / Bosch BME680        | Existing driver enabled; measurements verified on the USB node's installed firmware  |
+| RAK12039 / Plantower PMSA003I | Existing driver enabled; real hardware test pending                                  |
+| RAK13102 / Blues Notecard     | Transport and durable handoff queue implemented; real cellular hardware test pending |
 
-The new sensor build has passed compilation and three host tests. It has not yet
-been flashed onto the USB node or verified through our gateway and broker.
+Our build `2.7.26.7d798c3` has been flashed and verified over USB on the RAK4631
+sensor node and the Mini comparison node. BME680 readings work on our build;
+delivery through our gateway and broker remains unverified. The naming change
+has passed compilation and seven host tests; it is included in the next image.
+
+Stock Meshtastic names are replaced automatically when our image starts. Custom
+names survive upgrades. A comparison node is named `MFD Test <ID suffix>` with
+short name `MFDT`, producing a Bluetooth name such as `MFDT_2e53`.
 
 ## Build
 

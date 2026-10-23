@@ -1,0 +1,68 @@
+name: Mesh Fire Detection release
+
+on:
+  push:
+    tags:
+      - mfd-v*
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.repository == 'mesh-fire-detection/firmware'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.x
+          cache: pip
+
+      - run: pip install -U platformio
+
+      - name: Get release version string
+        id: version
+        run: echo "long=$(./bin/buildinfo.py long)" >> "$GITHUB_OUTPUT"
+        env:
+          BUILD_LOCATION: local
+
+      - name: Build mesh-fire-sensor
+        run: pio run -e mesh-fire-sensor
+
+      - name: Package release files
+        run: ./bin/mfd_package_release.sh "${{ steps.version.outputs.long }}" .pio/build/mesh-fire-sensor release-mfd
+
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: release-mfd/*
+
+      - name: Store release files as an artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mfd-release-${{ steps.version.outputs.long }}
+          path: release-mfd/*
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.long }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-mfd/* \
+            --title "Mesh Fire Detection firmware $VERSION" \
+            --notes "RAK4631 sensor build $VERSION from $GITHUB_SHA.
+
+          - mfd-rak4631-sensor-$VERSION.zip: upload to the Meshtastic Web Flasher (flasher.meshtastic.org).
+          - firmware-rak4631-$VERSION.uf2: copy onto the RAK4631 bootloader drive.
+          - SHA256SUMS: checksums; provenance is attested with GitHub artifact attestations.
+
+          Upgrading keeps the node's saved configuration, keys and channels. Do not factory erase."

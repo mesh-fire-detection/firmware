@@ -30,6 +30,29 @@ and DFU ZIP artifacts; all three host tests passed. The build used 105,260 bytes
 of RAM (42.3%) and 759,260 bytes of flash (93.1%). Additional gateway code will
 need its own build and size check.
 
+## Releases
+
+Pushing a tag `mfd-v<version>` (for example `mfd-v2.7.26.7d798c3`) runs
+`.github/workflows/mfd_release.yml`. It builds `mesh-fire-sensor`, repackages the
+output with `bin/mfd_package_release.sh`, attests build provenance, and publishes
+a GitHub release with:
+
+| File                                 | Purpose                                                     |
+| ------------------------------------ | ----------------------------------------------------------- |
+| `mfd-rak4631-sensor-<version>.zip`   | Upload to the Meshtastic Web Flasher; contains only the UF2 |
+| `firmware-rak4631-<version>.uf2`     | Copy onto the RAK4631 bootloader drive                      |
+| `firmware-rak4631-<version>-ota.zip` | Nordic DFU package                                          |
+| `firmware-rak4631-<version>.mt.json` | Per-board manifest in the format the web flasher reads      |
+| `firmware-<version>.json`            | Release manifest listing `rak4631` as the only target       |
+| `SHA256SUMS`                         | Checksums of every file above                               |
+
+Files carry the `rak4631` board name rather than `mesh-fire-sensor` because the
+web flasher looks them up as `firmware-<board>-<version>.<ext>`. The
+[Mesh Fire Detection flasher](https://github.com/mesh-fire-detection/flasher)
+serves these files; bump `types/mfdFirmware.json` there. In the web
+repository, set `MFD_RELEASE` in `src/core/nearby/firmware.ts` to the new
+release and keep the previous commit in `MFD_BUILDS`.
+
 ## Initial configuration
 
 RAK4631 nodes share the same firmware image. Their deployment role and enabled
@@ -67,7 +90,10 @@ channel, or reporting intervals. Do not reset it simply to apply defaults.
 Reporting uses Meshtastic's scheduling and airtime checks, so 900 seconds is a
 configured interval rather than a guaranteed delivery deadline. Device,
 environment, and particle readings are separate packets. A missing sensor does
-not produce fabricated zero readings.
+not produce fabricated zero readings. While the default public channel is still
+present, Meshtastic raises these intervals to a minimum of 1,800 seconds at boot.
+Both USB nodes currently have that 30-minute minimum; private-channel provisioning
+is still pending.
 
 The API address is `https://api.meshfiredetection.org`. Sensor nodes currently
 send mesh packets through a gateway; they do not call the HTTP API. The MQTT root
@@ -79,13 +105,40 @@ disabled. Channel payload encryption is separate from transport TLS. Gateway
 transport and TLS must be tested on the selected gateway hardware before field
 deployment; a future TLS endpoint needs matching firmware and broker settings.
 
+## Node names during flashing and provisioning
+
+On startup, our build replaces the stock pair `Meshtastic <last four ID digits>` /
+`<last four ID digits>` with `MFD Sensor <suffix>` / `MFDS` for SENSOR devices,
+or `MFD Node <suffix>` / `MFDN` for other roles. It saves the name in the owner
+configuration and node database. A custom long or short name prevents this
+replacement, including on subsequent upgrades. Identity, keys, and other owner
+fields are preserved.
+
+When preparing a comparison device, set its owner names to `MFD Test <suffix>` /
+`MFDT` after selecting the CLIENT profile. The purpose in the name is independent
+of the Meshtastic protocol role; the same RAK4631 image serves both devices.
+Restart after changing names so Bluetooth advertises the new short name.
+
+| Device                         | Long name         | Short name | Bluetooth name |
+| ------------------------------ | ----------------- | ---------- | -------------- |
+| RAK4631 + RAK1906, `!7d258b79` | `MFD Sensor 8b79` | `MFDS`     | `MFDS_8b79`    |
+| Mini comparison, `!752d2e53`   | `MFD Test 2e53`   | `MFDT`     | `MFDT_2e53`    |
+
+Bluetooth adds the last two MAC bytes to the short name. The long-name suffix
+uses the node ID; backend registration continues to use the full node ID.
+On October 3, 2026, both names were applied over USB and verified after restart;
+their owner fields apart from the two names, local/module settings, and channels
+were unchanged.
+The automatic startup behavior is in the next build, with seven passing host
+tests covering defaults, custom-name preservation, and identity preservation.
+
 ## Hardware support and evidence
 
-| Module                            | Firmware support                                     | Hardware verification                             |
-| --------------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
-| RAK1906 / Bosch BME680            | Existing I2C driver; environmental telemetry enabled | Read real measurements from the connected RAK4631 |
-| RAK12039 / Plantower PMSA003I     | Existing I2C driver; particle telemetry enabled      | Module not connected; pending bench test          |
-| RAK13102 / Blues Notecard carrier | No upstream Notecard transport integration           | Module not connected; transport decision pending  |
+| Module                            | Firmware support                                        | Hardware verification                                        |
+| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| RAK1906 / Bosch BME680            | Existing I2C driver; environmental telemetry enabled    | Read real measurements from the connected RAK4631            |
+| RAK12039 / Plantower PMSA003I     | Existing I2C driver; particle telemetry enabled         | Module not connected; pending bench test                     |
+| RAK13102 / Blues Notecard carrier | Project transport and durable handoff queue implemented | No physical Notecard/cellular test performed for this change |
 
 On October 2, 2026, the USB node identified itself as `!7d258b79`, RAK4631,
 Meshtastic `2.7.15.567b8ea`. After enabling only environmental measurement on that
@@ -93,6 +146,15 @@ installed firmware, it reported approximately 24.86 °C, 41.79% relative humidit
 and 954.35 hPa. Its radio region remained UNSET. This confirms the attached
 BME680 works on its installed firmware; it does not verify this new build or
 delivery to our broker.
+
+Later on October 2, 2026, the same sensor node was flashed with our
+`2.7.26.7d798c3` build. USB verification confirmed role SENSOR, region US, radio
+transmission disabled, and BME680 readings of approximately 24.23 °C, 41.30%
+relative humidity, and 954.85 hPa. The Mini node was flashed on October 3 with
+the same image and configured as CLIENT with environmental and particle
+measurements disabled. Its existing PKI keys and channels were preserved.
+The Mini has a broken reset button; local USB administration successfully
+entered its UF2 bootloader without pressing the button.
 
 BME680 is detected at I2C address 0x76 or 0x77. The upstream build includes Bosch
 BSEC. Its initial IAQ value of 50 had accuracy 0 in the device log, so it must not
@@ -109,11 +171,13 @@ RAK12039 and RAK13102 both occupy a WisBlock IO slot. Check the baseboard's IO
 slots and mechanical clearance before trying to place both on one node. RAK1906
 uses a sensor slot.
 
-## Gateway decision still required
+## Cellular gateway transport
 
-The backend specification currently uses a gateway with an LTE router and
-Meshtastic's native MQTT uplink to our own Mosquitto broker. That remains the
-implemented backend transport.
+The shared `mesh-fire-sensor` image now includes an opt-in Notecard gateway
+transport for RAK4631. Its contract matches the authenticated Notehub HTTPS
+adapter in [backend PR #27](https://github.com/mesh-fire-detection/backend/pull/27).
+The existing native MQTT transport remains available for gateways with a normal
+internet connection. Neither path is enabled automatically by this change.
 
 RAK13102 is a carrier for a Blues Notecard. The Notecard connects to Notehub,
 which then routes events to an MQTT broker or HTTPS service. It does not expose
@@ -121,12 +185,30 @@ an ordinary cellular TCP connection for Meshtastic's MQTT client. See the
 [Blues security model](https://dev.blues.io/datasheets/application-notes/blues-security-reliability-and-governance/)
 and [Notehub MQTT routing](https://dev.blues.io/guides-and-tutorials/routing-data-to-cloud/mqtt/).
 
-If we choose RAK13102, the next change needs a Notecard queue/transport in this
-firmware and an authenticated ingestion adapter for Notehub events. A Notehub
-JSON event is not a binary Meshtastic ServiceEnvelope accepted by the current
-backend. Record the selected transport in the backend SPEC and ARCHITECTURE in
-the same change. Until that choice is made, this build is a sensor-node build;
-it does not claim a working cellular gateway.
+The transport preserves the original encrypted ServiceEnvelope and wraps its
+base64 bytes in the `body` of an untemplated `mesh.qos` Note. It does not attempt
+to use the Notecard as a TCP modem. A locally provisioned `mfd-config.dbx` record
+must enable the gateway and name the expected Notehub ProductUID. Private-channel
+uplink and per-packet forwarding permission are required; channel MQTT downlink
+must be off. The firmware never provisions a public channel, enables radio
+transmission, resets a device, or stores the backend bearer credential.
+
+Eight host flash slots retain pending packets before Notecard handoff. Files
+are checksummed and committed through LittleFS rename; only a successful
+Notecard acknowledgement permits deletion. Full queues refuse new packets and
+log the rejection count. Corruption or a different Notecard/project/node binding
+stops forwarding and preserves the files. There is no automatic pruning.
+Mesh Fire builds preserve an 8 KiB preference reserve plus staging headroom
+and disable the upstream automatic filesystem format after a preference-save
+failure, so a failed save cannot silently erase the handoff queue.
+The Notecard queue is separately bounded at 256 Notes. See
+[provisioning, limits, recovery, and validation](NOTECARD_GATEWAY.md).
+
+The RAK4631 image compiles and host tests cover filtering, protobuf preservation,
+queue recovery, overflow, retries, and corruption. A C++ fixture was also
+accepted by the backend Notehub route and stored as three particle readings,
+including zero; repeated delivery was deduplicated. This is software evidence,
+not a physical cellular deployment test. No device was flashed for this change.
 
 The [RAK13102 quick-start guide](https://docs.rakwireless.com/product-categories/wisblock/rak13102/quickstart/)
 requires a suitable battery or regulated 5 V external supply for reliable
@@ -164,6 +246,13 @@ and the chosen delivery-latency requirements.
 7. Review and explicitly authorize flashing the connected node. Preserve its
    configuration and identity; a factory reset is not part of an upgrade.
 
-Flashing, radio provisioning, and the complete cellular path remain unverified.
-No firmware update, private key installation, or region change has been performed
-on the USB node by building this fork.
+Flashing and local sensor measurements have been verified on the devices above.
+Private-channel provisioning, physical gateway delivery, and the complete cellular path
+remain unverified. Radio transmission stays disabled on both nodes until their
+private-channel configuration is ready.
+
+## Audit follow-ups
+
+See the [October 4, 2026 firmware audit](MFD_AUDIT_2026-10-04.md) for provisioning,
+MQTT delivery, hardware assumptions, and end-to-end validation follow-ups.
+The audit does not establish hardware verification or authorize flashing a device.

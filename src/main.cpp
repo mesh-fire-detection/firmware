@@ -22,6 +22,7 @@
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
+#include "notecard/NotecardGateway.h"
 #include "power.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -989,6 +990,10 @@ void setup()
     auto rIf = initLoRa();
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
+
+#if defined(MESH_FIRE_DETECTION) && defined(ARCH_NRF52) && !MESHTASTIC_EXCLUDE_I2C
+    initNotecardGateway();
+#endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();

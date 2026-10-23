@@ -12,6 +12,7 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#include "notecard/NotecardGateway.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -376,6 +377,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
+#if defined(MESH_FIRE_DETECTION) && defined(ARCH_NRF52) && !MESHTASTIC_EXCLUDE_I2C
+        if (isFromUs(p))
+            queueNotecardTelemetry(*p, *p_decoded, chIndex);
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
@@ -786,6 +791,10 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     // call modules here
     // If this could be a spoofed packet, don't let the modules see it.
     if (!skipHandle) {
+#if defined(MESH_FIRE_DETECTION) && defined(ARCH_NRF52) && !MESHTASTIC_EXCLUDE_I2C
+        if (decodedState == DecodeState::DECODE_SUCCESS && p_encrypted && !isFromUs(p))
+            queueNotecardTelemetry(*p_encrypted, *p, p->channel);
+#endif
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
